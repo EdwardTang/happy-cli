@@ -29,6 +29,7 @@ export class EpicTracer {
   private eventsProcessed: number = 0;
   private eventsWritten: number = 0;
   private parseErrors: number = 0;
+  private messageQueue: RawJSONLines[] = [];
 
   constructor(config: EpicTracerConfig) {
     this.config = config;
@@ -106,33 +107,50 @@ export class EpicTracer {
       // Lazy-initialize ExecLogWriter on first message
       if (!this.execLogWriter) {
         await this.initializeWriter(message);
-      }
 
-      // Extract events from message
-      const events = this.eventExtractor.extractEvents(message);
-
-      this.eventsProcessed += events.length;
-
-      // Write events to exec-log
-      if (this.execLogWriter) {
-        for (const event of events) {
-          await this.execLogWriter.write(event);
-          this.eventsWritten++;
+        // Process any queued messages
+        if (this.messageQueue.length > 0) {
+          logger.debug("Processing queued messages", { count: this.messageQueue.length });
+          for (const queuedMessage of this.messageQueue) {
+            await this.processMessage(queuedMessage);
+          }
+          this.messageQueue = [];
         }
       }
 
-      // Log progress periodically
-      if (this.eventsProcessed % 10 === 0) {
-        logger.debug("EpicTracer progress", {
-          eventsProcessed: this.eventsProcessed,
-          eventsWritten: this.eventsWritten,
-          parseErrors: this.parseErrors
-        });
-      }
+      // Process the message
+      await this.processMessage(message);
     } catch (error) {
-      logger.warn("Failed to process message", {
+      logger.warn("Failed to handle message", {
         messageUuid: message.uuid,
         error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  /**
+   * Process a single message (extract and write events)
+   */
+  private async processMessage(message: RawJSONLines): Promise<void> {
+    // Extract events from message
+    const events = this.eventExtractor.extractEvents(message);
+
+    this.eventsProcessed += events.length;
+
+    // Write events to exec-log
+    if (this.execLogWriter) {
+      for (const event of events) {
+        await this.execLogWriter.write(event);
+        this.eventsWritten++;
+      }
+    }
+
+    // Log progress periodically
+    if (this.eventsProcessed % 10 === 0) {
+      logger.debug("EpicTracer progress", {
+        eventsProcessed: this.eventsProcessed,
+        eventsWritten: this.eventsWritten,
+        parseErrors: this.parseErrors
       });
     }
   }
