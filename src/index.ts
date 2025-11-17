@@ -128,6 +128,23 @@ import { execFileSync } from 'node:child_process'
       process.exit(1)
     }
     return;
+  } else if (subcommand === 'epic-trace') {
+    // Handle epic-trace command
+    try {
+      const { handleEpicTraceCommand } = await import('./commands/epicTrace');
+      await handleEpicTraceCommand(args.slice(1));
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error')
+      if (process.env.DEBUG) {
+        console.error(error)
+      }
+      logger.warn('epic-trace command failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
+      process.exit(1)
+    }
+    return;
   } else if (subcommand === 'daemon') {
     // Show daemon management help
     const daemonSubcommand = args[1]
@@ -297,6 +314,7 @@ ${chalk.bold('Usage:')}
   happy codex             Start Codex mode
   happy connect           Connect AI vendor API keys
   happy notify            Send push notification
+  happy epic-trace        Trace epic execution with real-time logging
   happy daemon            Manage background service that allows
                             to spawn new sessions away from your computer
   happy doctor            System diagnostics & troubleshooting
